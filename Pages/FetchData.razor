@@ -1,0 +1,212 @@
+﻿@page "/fetchdata"
+@inject HttpClient Http
+@using Microsoft.JSInterop;
+@implements IAsyncDisposable;
+
+<PageTitle>Weather forecast</PageTitle>
+
+<h1>Weather forecast</h1>
+
+<p>This component demonstrates fetching data from the server.</p>
+
+<table class="table table-hover table-fixed">
+    <thead class="thead-light">
+        <tr>
+            <th scope="col" class="th-lg text-center" style="width:6em">Time</th>
+            <th scope="col" class="th-lg text-center" style="width:10em">Tempature</th>
+            <th scope="col" class="th-lg text-center" style="width:10em">Feels Like</th>
+            <th scope="col" class="th-sm text-center" style="width:10em">Humidity</th>
+            <th scope="col" class="th-lg text-center">Description</th>
+        </tr>
+    </thead>
+    <tbody class="">
+
+        @if (isLoaded)
+        {
+            @for (int x =0; x < forecasts.Length; x++)
+            {
+                if (x==0 || DtFromUnix(forecasts[x].dt).ToShortDateString() != date)
+                {
+                    date = DtFromUnix(forecasts[x].dt).ToShortDateString();
+                    <tr>
+                        <th colspan="5" style="text-align:center" scope="col">@date</th>
+                    </tr>
+                    <tr>
+                        <th scope="row" class="text-end">@DtFromUnix(forecasts[x].dt).ToShortTimeString()</th>
+                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x].main?.temp))</td>
+                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.main?.feels_like))</td>
+                        <td class="text-center">@forecasts[x]?.main?.humidity %</td>
+                        <td class="text-capitalize">@forecasts[x]?.weather[0]?.description</td>
+                    </tr>
+                } 
+                else
+                {            
+                    <tr>
+                        <th scope="row" class="text-end">@DtFromUnix(forecasts[x].dt).ToShortTimeString()</th>
+                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x].main?.temp))</td>
+                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.main?.feels_like))</td>
+                        <td class="text-center">@forecasts[x]?.main?.humidity %</td>
+                        <td class="text-capitalize">@forecasts[x]?.weather[0]?.description</td>
+                    </tr>
+                }
+            }
+
+        }
+        else
+        {
+            <tr><em>Loading...</em></tr>
+
+        }
+    </tbody>
+</table>
+
+@code {
+    private WeatherForcast? weatherForcasts;
+    private Forcast[] forecasts;
+    private string date;
+    private readonly Lazy<Task<IJSObjectReference>> moduleTask = default!;
+    private readonly DotNetObjectReference<FetchData> dotNetObjectReference;
+    private GeoCoordinates? location = null;
+    private bool isLoaded = false;
+
+    [Inject]
+    private IJSRuntime jsRuntime { get; set; } = default!;
+
+    public FetchData()
+    {
+        moduleTask = new(() => jsRuntime!.InvokeAsync<IJSObjectReference>(
+            identifier: "import",
+            args: "./scripts/geoLocationJsInterop.js")
+        .AsTask());
+
+        dotNetObjectReference = DotNetObjectReference.Create(this);
+    }
+
+    public async Task GetLocationAsync()
+    {
+        var module = await moduleTask.Value;
+        await module.InvokeVoidAsync(identifier: "getCurrentPosition", dotNetObjectReference);
+    }
+
+    [JSInvokable]
+    public async Task OnSuccessAsync(GeoCoordinates geoCoordinates)
+    {
+        this.location = geoCoordinates;
+        await InvokeAsync(StateHasChanged);
+        weatherForcasts = await Http.GetFromJsonAsync<WeatherForcast>(
+                "?lat=" + location!.Latitude + "&lon=" + location.Longitude + "&units=imperial&appid=b5c3b022560ac4d3a8544fbaf2083e74"
+            );
+        forecasts = weatherForcasts.list;
+        date = DtFromUnix(forecasts[0].dt).ToShortDateString();
+        isLoaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (moduleTask.IsValueCreated)
+        {
+            var module = await moduleTask.Value;
+            await module.DisposeAsync();
+        }
+    }
+
+    public class GeoCoordinates
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public double Accuracy { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {        
+        await GetLocationAsync();
+    }
+
+    private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    public static DateTime DtFromUnix(long ms)
+    {
+        DateTime dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);        
+        return dateTime.AddSeconds(ms).ToLocalTime();
+    }
+
+    public partial class WeatherForcast
+    {
+        public string? cod { get; set; }
+        public int? message { get; set; }
+        public int? cnt { get; set; }
+        public Forcast[]? list { get; set; }
+        public City? city { get; set; }
+    }
+
+    public partial class Forcast
+    {
+        public long dt { get; set; }
+        public Main? main { get; set; }
+        public Weather[]? weather { get; set; }
+        public Clouds? clouds { get; set; }
+        public Wind? wind { get; set; }
+        public int? visibility { get; set; }
+        public double? pop { get; set; }
+        public Sys? sys { get; set; }
+        public string? dt_txt { get; set; }
+    }
+
+    public class Main
+    {
+        public float? temp { get; set; }
+        public float? feels_like { get; set; }
+        public float? temp_min { get; set; }
+        public float? temp_max { get; set; }
+        public int? pressure { get; set; }
+        public int? sea_level { get; set; }
+        public int? grnd_level { get; set; }
+        public int? humidity { get; set; }
+        public float? temp_kf { get; set; }
+    }
+
+    public class Wind
+    {
+        public float? speed { get; set; }
+        public int? deg { get; set; }
+        public float? gust { get; set; }
+    }
+
+    public class Weather
+    {
+        public int? id { get; set; }
+        public string? main { get; set; }
+        public string? description { get; set; }
+        public string? icon { get; set; }
+    }
+
+    public class Clouds
+    {
+        public int? all { get; set; }
+    }
+
+    public class Sys
+    {
+        public string? pod { get; set; }
+    }
+
+    public partial class City
+    {
+        public int? id { get; set; }
+        public string? name { get; set; }
+        public Coord? coord { get; set; }
+        public string? country { get; set; }
+        public long? population { get; set; }
+        public int? timezone { get; set; }
+        public long? sunrise { get; set; }
+        public long? sunset { get; set; }
+    }
+
+    public class Coord
+    {
+        public float? lat { get; set; }
+        public float? lon { get; set; }
+
+    }
+}
