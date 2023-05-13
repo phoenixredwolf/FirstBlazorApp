@@ -1,60 +1,78 @@
 ﻿@page "/fetchdata"
 @inject HttpClient Http
-@using Microsoft.JSInterop;
-@implements IAsyncDisposable;
+
 
 <PageTitle>Weather forecast</PageTitle>
 
-<h1>Weather forecast</h1>
+<div>
+    <p class="fs-1" style="text-align:center">Weather forecast</p>
 
-<p>This component demonstrates fetching data from the server.</p>
+    <p class="fs-3">City: @cityName</p>
+    <p class="fs-6">
+        Sunrise: @sunrise<br />
+        Sunset: @sunset
+    </p>
 
+</div>
+<div>
+    <p class="fs-4">Enter zipcode</p>
+    <input id="zipInput" type="number" @bind="@zipCode" maxlength="5" minlength="5"/>
+    <button id="zipBtn" class="btn btn-primary" @onclick="GetWeather" enabled="btnEnabled">Search</button>
+</div>
 <table class="table table-hover table-fixed">
     <thead class="thead-light">
         <tr>
-            <th scope="col" class="th-lg text-center" style="width:6em">Time</th>
-            <th scope="col" class="th-lg text-center" style="width:10em">Tempature</th>
-            <th scope="col" class="th-lg text-center" style="width:10em">Feels Like</th>
-            <th scope="col" class="th-sm text-center" style="width:10em">Humidity</th>
-            <th scope="col" class="th-lg text-center">Description</th>
+            <th scope="col" style="width:6em">Date</th>
+            <th scope="col" class="text-center" style="width:6em">Time</th>
+            <th scope="col" class="text-center" style="width:8em">Tempature</th>
+            <th scope="col" class="text-center" style="width:8em">Feels Like</th>
+            <th scope="col" class="text-center" style="width:8em">Humidity</th>
+            <th scope="col" class="text-center" style="width:8em">Wind</th>
+            <th scope="col" class="text-center" style="width:8em">Wind Gust</th>
+            <th scope="col" >Description</th>
         </tr>
     </thead>
     <tbody class="">
 
         @if (isLoaded)
         {
-            @for (int x =0; x < forecasts.Length; x++)
+            @if (weatherForcasts != null)
             {
-                if (x==0 || DtFromUnix(forecasts[x].dt).ToShortDateString() != date)
+                @for (int x =0; x < forecasts?.Length; x++)
                 {
-                    date = DtFromUnix(forecasts[x].dt).ToShortDateString();
-                    <tr>
-                        <th colspan="5" style="text-align:center" scope="col">@date</th>
-                    </tr>
-                    <tr>
-                        <th scope="row" class="text-end">@DtFromUnix(forecasts[x].dt).ToShortTimeString()</th>
-                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x].main?.temp))</td>
-                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.main?.feels_like))</td>
-                        <td class="text-center">@forecasts[x]?.main?.humidity %</td>
-                        <td class="text-capitalize">@forecasts[x]?.weather[0]?.description</td>
-                    </tr>
-                } 
-                else
-                {            
-                    <tr>
-                        <th scope="row" class="text-end">@DtFromUnix(forecasts[x].dt).ToShortTimeString()</th>
-                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x].main?.temp))</td>
-                        <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.main?.feels_like))</td>
-                        <td class="text-center">@forecasts[x]?.main?.humidity %</td>
-                        <td class="text-capitalize">@forecasts[x]?.weather[0]?.description</td>
-                    </tr>
+                    if (x==0 || DtFromUnix(forecasts[x].dt).ToShortDateString() != date)
+                    {
+                        date = DtFromUnix(forecasts[x].dt).ToShortDateString();
+                        <tr style="border-top:double">
+                            <th scope="row">@date</th>
+                            <td class="text-end">@DtFromUnix(forecasts[x].dt).ToShortTimeString()</td>
+                            <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x].main?.temp))</td>
+                            <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.main?.feels_like))</td>
+                            <td class="text-center">@forecasts[x]?.main?.humidity %</td>
+                            <td class="text-center">@GetWindDirection(Convert.ToInt16(forecasts[x]?.wind?.deg)) @@ @Math.Round(Convert.ToDouble(forecasts[x]?.wind?.speed)) mph</td>
+                            <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.wind?.gust)) mph</td>
+                            <td class="text-capitalize">@forecasts[x]?.weather?[0].description</td>
+                        </tr>
+                    } 
+                    else
+                    {            
+                        <tr>
+                            <th></th>
+                            <td class="text-end">@DtFromUnix(forecasts[x].dt).ToShortTimeString()</td>
+                            <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x].main?.temp))</td>
+                            <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.main?.feels_like))</td>
+                            <td class="text-center">@forecasts[x]?.main?.humidity %</td>
+                            <td class="text-center">@GetWindDirection(Convert.ToInt16(forecasts[x]?.wind?.deg)) @@ @Math.Round(Convert.ToDouble(forecasts[x]?.wind?.speed)) mph</td>
+                            <td class="text-center">@Math.Round(Convert.ToDouble(forecasts[x]?.wind?.gust)) mph</td>
+                            <td class="text-capitalize">@forecasts[x]?.weather?[0].description</td>
+                        </tr>
+                    }
                 }
-            }
-
+            }            
         }
         else
         {
-            <tr><em>Loading...</em></tr>
+            <tr><td colspan="8" class="text-center fs-3"><em>Loading...</em></td></tr>
 
         }
     </tbody>
@@ -62,65 +80,18 @@
 
 @code {
     private WeatherForcast? weatherForcasts;
-    private Forcast[] forecasts;
-    private string date;
-    private readonly Lazy<Task<IJSObjectReference>> moduleTask = default!;
-    private readonly DotNetObjectReference<FetchData> dotNetObjectReference;
-    private GeoCoordinates? location = null;
+    private Forcast[]? forecasts;
+    private string? date;
     private bool isLoaded = false;
-
-    [Inject]
-    private IJSRuntime jsRuntime { get; set; } = default!;
-
-    public FetchData()
-    {
-        moduleTask = new(() => jsRuntime!.InvokeAsync<IJSObjectReference>(
-            identifier: "import",
-            args: "./scripts/geoLocationJsInterop.js")
-        .AsTask());
-
-        dotNetObjectReference = DotNetObjectReference.Create(this);
-    }
-
-    public async Task GetLocationAsync()
-    {
-        var module = await moduleTask.Value;
-        await module.InvokeVoidAsync(identifier: "getCurrentPosition", dotNetObjectReference);
-    }
-
-    [JSInvokable]
-    public async Task OnSuccessAsync(GeoCoordinates geoCoordinates)
-    {
-        this.location = geoCoordinates;
-        await InvokeAsync(StateHasChanged);
-        weatherForcasts = await Http.GetFromJsonAsync<WeatherForcast>(
-                "?lat=" + location!.Latitude + "&lon=" + location.Longitude + "&units=imperial&appid=b5c3b022560ac4d3a8544fbaf2083e74"
-            );
-        forecasts = weatherForcasts.list;
-        date = DtFromUnix(forecasts[0].dt).ToShortDateString();
-        isLoaded = true;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (moduleTask.IsValueCreated)
-        {
-            var module = await moduleTask.Value;
-            await module.DisposeAsync();
-        }
-    }
-
-    public class GeoCoordinates
-    {
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
-        public double Accuracy { get; set; }
-    }
+    private City? city;
+    private string? cityName;
+    private string? sunrise;
+    private string? sunset;
+    private string zipCode = "08096";
 
     protected override async Task OnInitializedAsync()
-    {        
-        await GetLocationAsync();
+    {
+        await GetWeather();
     }
 
     private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -129,6 +100,77 @@
     {
         DateTime dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);        
         return dateTime.AddSeconds(ms).ToLocalTime();
+    }
+
+    private async Task GetWeather()
+    {
+        var result = await Http.GetAsync(
+          "?zip=" + zipCode + ",us&units=imperial&appid=b5c3b022560ac4d3a8544fbaf2083e74"
+            );
+        if (result.IsSuccessStatusCode)
+        {
+            weatherForcasts = await result.Content.ReadFromJsonAsync<WeatherForcast>();
+            if(weatherForcasts is not null)
+            {
+                forecasts = weatherForcasts.list;
+                if(weatherForcasts.city is not null)
+                {
+                    city = weatherForcasts.city;
+                    cityName = city.name;
+                }
+            }
+            if(forecasts is not null)
+            {
+                sunrise = DtFromUnix(Convert.ToInt64(city?.sunrise)).ToShortTimeString();
+                sunset = DtFromUnix(Convert.ToInt64(city?.sunset)).ToShortTimeString();
+                date = DtFromUnix(forecasts[0].dt).ToShortDateString();
+            }
+            isLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        else
+        {
+            weatherForcasts = null;
+            cityName = "City Not Found! Please Try Again";
+            sunrise = null;
+            sunset = null;
+            isLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+    }
+
+    private string GetWindDirection(int degrees)
+    {
+        string result;
+        switch(degrees)
+        {
+            case <23 or >337:
+                result = "N";
+                break;
+            case >22 and <68:
+                result = "NE";
+                break;
+            case >67 and <113:
+                result = "E";
+                break;
+            case >112 and <158:
+                result = "SE";
+                break;
+            case >157 and <203:
+                result = "S";
+                break;
+            case >202 and <248:
+                result = "SW";
+                break;
+            case >247 and <293:
+                result = "W";
+                break;
+            case >292 and <338:
+                result = "NW";
+                break;
+        }
+        return result;
     }
 
     public partial class WeatherForcast
